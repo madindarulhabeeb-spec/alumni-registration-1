@@ -6,268 +6,333 @@
   <title>Programme Registration Portal</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
-  <div id="app" class="app-container">
+<!-- ══════════════════════════════════════════════════
+     HOST PASSWORD MODAL  (shown before host dashboard)
+══════════════════════════════════════════════════════ -->
+<div id="passwordOverlay" class="overlay hidden">
+  <div class="modal-card">
+    <div class="modal-icon"><i class="fa-solid fa-lock"></i></div>
+    <h2>Host Admin Access</h2>
+    <p>Enter the host password to access the dashboard.</p>
+    <div class="form-group" style="margin-top:1rem;">
+      <input type="password" id="hostPasswordInput" class="form-control"
+             placeholder="Enter host password" />
+      <small id="passwordError" class="error-text hidden">Incorrect password. Try again.</small>
+    </div>
+    <button id="submitPasswordBtn" class="btn btn-primary btn-block">
+      <i class="fa-solid fa-unlock"></i> Access Dashboard
+    </button>
+  </div>
+</div>
 
-    <!-- NAVIGATION HEADER -->
-    <header class="navbar">
-      <div class="nav-brand">
-        <i class="fa-solid fa-graduation-cap"></i>
-        <span>Programme Hub</span>
+<!-- ══════════════════════════════════════════════════
+     CHANGE PASSWORD MODAL
+══════════════════════════════════════════════════════ -->
+<div id="changePasswordOverlay" class="overlay hidden">
+  <div class="modal-card">
+    <div class="modal-icon" style="color:#f59e0b;"><i class="fa-solid fa-key"></i></div>
+    <h2>Change Host Password</h2>
+    <div class="form-group" style="margin-top:1rem;">
+      <label>Current Password</label>
+      <input type="password" id="currentPasswordInput" class="form-control" placeholder="Enter current password" />
+    </div>
+    <div class="form-group">
+      <label>New Password</label>
+      <input type="password" id="newPasswordInput" class="form-control" placeholder="Enter new password" />
+    </div>
+    <div class="form-group">
+      <label>Confirm New Password</label>
+      <input type="password" id="confirmPasswordInput" class="form-control" placeholder="Confirm new password" />
+    </div>
+    <small id="changePwError" class="error-text hidden"></small>
+    <small id="changePwSuccess" class="success-text hidden">Password changed successfully!</small>
+    <div style="display:flex;gap:0.75rem;margin-top:1rem;">
+      <button id="savePasswordBtn" class="btn btn-primary" style="flex:1;">
+        <i class="fa-solid fa-floppy-disk"></i> Save Password
+      </button>
+      <button id="cancelPasswordBtn" class="btn btn-outline" style="flex:1;">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MAIN APP
+══════════════════════════════════════════════════════ -->
+<div id="app" class="app-container">
+
+  <!-- NAVBAR -->
+  <header class="navbar">
+    <div class="nav-brand">
+      <i class="fa-solid fa-graduation-cap"></i>
+      <span>Programme Hub</span>
+    </div>
+    <div id="navModeIndicator"></div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════
+       PARTICIPANT REGISTRATION VIEW
+  ══════════════════════════════════════════════════ -->
+  <main id="participantView" class="view-section hidden">
+    <div class="card form-card">
+      <div class="card-header">
+        <h2><i class="fa-solid fa-clipboard-user"></i> Participant Registration</h2>
+        <p>Fill in your details to register for a programme.</p>
       </div>
-      <div class="nav-mode-indicator" id="navModeIndicator"></div>
-    </header>
 
-    <!-- ========================================== -->
-    <!-- PARTICIPANT REGISTRATION VIEW              -->
-    <!-- ========================================== -->
-    <main id="participantView" class="view-section hidden">
-      <div class="card form-card">
-        <div class="card-header">
-          <h2><i class="fa-solid fa-clipboard-user"></i> Participant Registration</h2>
-          <p>Fill out your details below to register for a programme.</p>
+      <!-- REGISTRATION FORM -->
+      <form id="registrationForm">
+
+        <!-- NAME -->
+        <div class="form-group">
+          <label for="participantName">
+            <i class="fa-solid fa-user"></i> Name of the Participant <span class="required">*</span>
+          </label>
+          <input type="text" id="participantName" class="form-control"
+                 placeholder="Enter your full name" autocomplete="off" />
+          <small id="nameError" class="error-text hidden">Please enter your name.</small>
         </div>
 
-        <form id="registrationForm" class="registration-form">
+        <!-- PROGRAMME CHECKBOXES -->
+        <div class="form-group">
+          <label>
+            <i class="fa-solid fa-list-check"></i> Choose Programme(s) <span class="required">*</span>
+          </label>
+          <div class="programmes-box" id="programmesBox">
 
-          <!-- 1. PARTICIPANT NAME -->
-          <div class="form-group">
-            <label for="participantName">
-              <i class="fa-solid fa-user"></i> Name of the Participant <span class="required">*</span>
-            </label>
-            <input
-              type="text"
-              id="participantName"
-              class="form-control"
-              placeholder="Enter your full name"
-              required
-              autocomplete="off"
-            />
-          </div>
-
-          <!-- 2. PROGRAMME SELECTION — CHECKBOXES (Multiple allowed) -->
-          <div class="form-group">
-            <label>
-              <i class="fa-solid fa-list-check"></i> Choose Programme(s) <span class="required">*</span>
-            </label>
-            <div class="programmes-box" id="programmesBox">
-
-              <!-- Each programme row: checkbox + label + hidden detail input -->
-              <div class="programme-row" data-type="topic">
-                <label class="programme-checkbox-label">
-                  <input type="checkbox" class="programme-check" value="Malayalam Speech" />
-                  <span class="checkbox-custom"></span>
-                  <span class="programme-name">Malayalam Speech</span>
-                </label>
-                <div class="programme-detail hidden">
-                  <input type="text" class="form-control detail-input" placeholder="Enter topic of your speech" />
-                  <small class="help-text">Provide the topic you will present.</small>
-                </div>
+            <div class="programme-row" data-type="topic">
+              <label class="prog-label">
+                <input type="checkbox" class="programme-check" value="Malayalam Speech" />
+                <span class="checkbox-custom"></span>
+                <span class="prog-name">Malayalam Speech</span>
+              </label>
+              <div class="prog-detail hidden">
+                <input type="text" class="form-control detail-input"
+                       placeholder="Enter topic of your speech" />
               </div>
-
-              <div class="programme-row" data-type="song">
-                <label class="programme-checkbox-label">
-                  <input type="checkbox" class="programme-check" value="Madh Song" />
-                  <span class="checkbox-custom"></span>
-                  <span class="programme-name">Madh Song</span>
-                </label>
-                <div class="programme-detail hidden">
-                  <input type="text" class="form-control detail-input" placeholder="Enter first line of the song" />
-                  <small class="help-text">Provide the opening line of the song.</small>
-                </div>
-              </div>
-
-              <div class="programme-row" data-type="song">
-                <label class="programme-checkbox-label">
-                  <input type="checkbox" class="programme-check" value="Mappilappattu" />
-                  <span class="checkbox-custom"></span>
-                  <span class="programme-name">Mappilappattu</span>
-                </label>
-                <div class="programme-detail hidden">
-                  <input type="text" class="form-control detail-input" placeholder="Enter first line of the song" />
-                  <small class="help-text">Provide the opening line of the song.</small>
-                </div>
-              </div>
-
-              <div class="programme-row" data-type="topic">
-                <label class="programme-checkbox-label">
-                  <input type="checkbox" class="programme-check" value="Kathaprasangam" />
-                  <span class="checkbox-custom"></span>
-                  <span class="programme-name">Kathaprasangam</span>
-                </label>
-                <div class="programme-detail hidden">
-                  <input type="text" class="form-control detail-input" placeholder="Enter topic of your Kathaprasangam" />
-                  <small class="help-text">Provide the topic you will present.</small>
-                </div>
-              </div>
-
-              <div class="programme-row" data-type="song">
-                <label class="programme-checkbox-label">
-                  <input type="checkbox" class="programme-check" value="Group Song" />
-                  <span class="checkbox-custom"></span>
-                  <span class="programme-name">Group Song</span>
-                </label>
-                <div class="programme-detail hidden">
-                  <input type="text" class="form-control detail-input" placeholder="Enter first line of the song" />
-                  <small class="help-text">Provide the opening line of the song.</small>
-                </div>
-              </div>
-
-              <div class="programme-row" data-type="topic">
-                <label class="programme-checkbox-label">
-                  <input type="checkbox" class="programme-check" value="Conversation Malayalam" />
-                  <span class="checkbox-custom"></span>
-                  <span class="programme-name">Conversation Malayalam</span>
-                </label>
-                <div class="programme-detail hidden">
-                  <input type="text" class="form-control detail-input" placeholder="Enter topic of your conversation" />
-                  <small class="help-text">Provide the topic you will present.</small>
-                </div>
-              </div>
-
             </div>
-            <small id="programmeError" class="error-text hidden">Please select at least one programme.</small>
-          </div>
 
-          <!-- SUBMIT BUTTON -->
-          <button type="submit" class="btn btn-primary btn-block" id="submitBtn">
-            <i class="fa-solid fa-paper-plane"></i> Register Now
+            <div class="programme-row" data-type="song">
+              <label class="prog-label">
+                <input type="checkbox" class="programme-check" value="Madh Song" />
+                <span class="checkbox-custom"></span>
+                <span class="prog-name">Madh Song</span>
+              </label>
+              <div class="prog-detail hidden">
+                <input type="text" class="form-control detail-input"
+                       placeholder="Enter first line of the song" />
+              </div>
+            </div>
+
+            <div class="programme-row" data-type="song">
+              <label class="prog-label">
+                <input type="checkbox" class="programme-check" value="Mappilappattu" />
+                <span class="checkbox-custom"></span>
+                <span class="prog-name">Mappilappattu</span>
+              </label>
+              <div class="prog-detail hidden">
+                <input type="text" class="form-control detail-input"
+                       placeholder="Enter first line of the song" />
+              </div>
+            </div>
+
+            <div class="programme-row" data-type="topic">
+              <label class="prog-label">
+                <input type="checkbox" class="programme-check" value="Kathaprasangam" />
+                <span class="checkbox-custom"></span>
+                <span class="prog-name">Kathaprasangam</span>
+              </label>
+              <div class="prog-detail hidden">
+                <input type="text" class="form-control detail-input"
+                       placeholder="Enter topic of your Kathaprasangam" />
+              </div>
+            </div>
+
+            <div class="programme-row" data-type="song">
+              <label class="prog-label">
+                <input type="checkbox" class="programme-check" value="Group Song" />
+                <span class="checkbox-custom"></span>
+                <span class="prog-name">Group Song</span>
+              </label>
+              <div class="prog-detail hidden">
+                <input type="text" class="form-control detail-input"
+                       placeholder="Enter first line of the song" />
+              </div>
+            </div>
+
+            <div class="programme-row" data-type="topic">
+              <label class="prog-label">
+                <input type="checkbox" class="programme-check" value="Conversation Malayalam" />
+                <span class="checkbox-custom"></span>
+                <span class="prog-name">Conversation Malayalam</span>
+              </label>
+              <div class="prog-detail hidden">
+                <input type="text" class="form-control detail-input"
+                       placeholder="Enter topic of your conversation" />
+              </div>
+            </div>
+
+          </div>
+          <small id="programmeError" class="error-text hidden">Please select at least one programme.</small>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">
+          <i class="fa-solid fa-paper-plane"></i> <span id="submitBtnText">Register Now</span>
+        </button>
+      </form>
+
+      <!-- SUCCESS CARD -->
+      <div id="successCard" class="success-card hidden">
+        <div class="success-icon-wrapper">
+          <i class="fa-solid fa-circle-check"></i>
+        </div>
+        <h3 id="successTitle">Registration Successful!</h3>
+        <p class="success-subtext">
+          Thank you, <strong id="registeredName"></strong>! Your details have been submitted.
+        </p>
+
+        <div class="registration-summary-box" id="registrationSummaryBox"></div>
+
+        <!-- DISCLAIMER -->
+        <div class="disclaimer-card">
+          <div class="disclaimer-header">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span>Disclaimer</span>
+          </div>
+          <p class="disclaimer-body">"The programmes should be less than 5 minutes"</p>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:0.75rem;">
+          <!-- EDIT BUTTON -->
+          <button class="btn btn-edit btn-block" id="editRegistrationBtn">
+            <i class="fa-solid fa-pen-to-square"></i> Edit My Registration
           </button>
-
-        </form>
-
-        <!-- SUCCESS CONFIRMATION SCREEN -->
-        <div id="successCard" class="success-card hidden">
-          <div class="success-icon-wrapper">
-            <i class="fa-solid fa-circle-check"></i>
-          </div>
-          <h3>Registration Successful!</h3>
-          <p class="success-subtext">Thank you, <strong id="registeredName">Participant</strong>! Your registration has been submitted.</p>
-
-          <div class="registration-summary-box" id="registrationSummaryBox">
-            <!-- Populated by JS -->
-          </div>
-
-          <!-- DISCLAIMER -->
-          <div class="disclaimer-card">
-            <div class="disclaimer-header">
-              <i class="fa-solid fa-triangle-exclamation"></i>
-              <span>Disclaimer</span>
-            </div>
-            <p class="disclaimer-body">"The programmes should be less than 5 minutes"</p>
-          </div>
-
+          <!-- NEW REGISTRATION -->
           <button class="btn btn-secondary btn-block" id="newRegistrationBtn">
             <i class="fa-solid fa-user-plus"></i> Register Another Participant
           </button>
         </div>
-
       </div>
-    </main>
 
+    </div>
+  </main>
 
-    <!-- ========================================== -->
-    <!-- HOST DASHBOARD VIEW                        -->
-    <!-- ========================================== -->
-    <main id="hostView" class="view-section hidden">
+  <!-- ══════════════════════════════════════════════
+       HOST DASHBOARD VIEW
+  ══════════════════════════════════════════════════ -->
+  <main id="hostView" class="view-section hidden">
 
-      <!-- HOST TOP BANNER & LINK SHARING -->
-      <div class="card host-header-card">
+    <!-- HOST HEADER + SHARING LINK -->
+    <div class="card host-header-card">
+      <div class="host-title-row">
         <div class="host-title-group">
           <h2><i class="fa-solid fa-user-shield"></i> Host Admin Dashboard</h2>
-          <p>View all registrations and share the participant link below.</p>
+          <p>Manage all registrations and share the participant link below.</p>
         </div>
+        <button id="changePasswordBtn" class="btn btn-outline btn-sm">
+          <i class="fa-solid fa-key"></i> Change Password
+        </button>
+      </div>
 
-        <div class="share-link-box">
-          <div class="share-link-header">
-            <i class="fa-solid fa-share-nodes"></i>
-            <span>Participant Registration Link — Copy &amp; Share with Participants</span>
-          </div>
-          <div class="share-input-group">
-            <input type="text" id="participantLinkInput" class="share-link-input" readonly value="" />
-            <button id="copyLinkBtn" class="btn btn-copy">
-              <i class="fa-solid fa-copy"></i> <span id="copyBtnText">Copy Link</span>
-            </button>
-          </div>
-          <p class="share-note"><i class="fa-solid fa-shield-halved"></i> Participants can only register — they cannot view other participants' data.</p>
+      <!-- PARTICIPANT LINK SHARING BOX -->
+      <div class="share-link-box">
+        <div class="share-link-header">
+          <i class="fa-solid fa-share-nodes"></i>
+          <span>Participant Registration Link — Share with Participants</span>
+        </div>
+        <div class="share-input-group">
+          <input type="text" id="participantLinkInput" class="share-link-input" readonly />
+          <button id="copyLinkBtn" class="btn btn-copy">
+            <i class="fa-solid fa-copy"></i> <span id="copyBtnText">Copy Link</span>
+          </button>
+        </div>
+        <p class="share-note">
+          <i class="fa-solid fa-shield-halved"></i>
+          Participants can only register — they cannot view other participants' data.
+        </p>
+      </div>
+    </div>
+
+    <!-- SPREADSHEET -->
+    <div class="card spreadsheet-card">
+      <div class="spreadsheet-toolbar">
+        <div class="toolbar-search">
+          <i class="fa-solid fa-magnifying-glass search-icon"></i>
+          <input type="text" id="searchInput" placeholder="Search by name, programme or topic…" class="search-input" />
+        </div>
+        <div class="toolbar-actions">
+          <button id="exportCsvBtn" class="btn btn-outline">
+            <i class="fa-solid fa-file-csv"></i> Export CSV
+          </button>
+          <button id="addSampleDataBtn" class="btn btn-outline">
+            <i class="fa-solid fa-database"></i> Test Data
+          </button>
+          <button id="clearDataBtn" class="btn btn-danger-outline">
+            <i class="fa-solid fa-trash-can"></i> Clear All
+          </button>
         </div>
       </div>
 
-      <!-- SPREADSHEET TOOLBAR & TABLE -->
-      <div class="card spreadsheet-card">
-        <div class="spreadsheet-toolbar">
-          <div class="toolbar-search">
-            <i class="fa-solid fa-magnifying-glass search-icon"></i>
-            <input type="text" id="searchInput" placeholder="Search by name, programme, or topic..." class="search-input" />
-          </div>
-          <div class="toolbar-actions">
-            <button id="exportCsvBtn" class="btn btn-outline">
-              <i class="fa-solid fa-file-csv"></i> Export CSV
-            </button>
-            <button id="addSampleDataBtn" class="btn btn-outline">
-              <i class="fa-solid fa-database"></i> Add Test Data
-            </button>
-            <button id="clearDataBtn" class="btn btn-danger-outline">
-              <i class="fa-solid fa-trash-can"></i> Clear All
-            </button>
-          </div>
+      <!-- STATS -->
+      <div class="stats-bar">
+        <div class="stat-item">
+          <span class="stat-label">Total Entries:</span>
+          <span class="stat-value" id="totalCount">0</span>
         </div>
-
-        <!-- STATS BAR -->
-        <div class="stats-bar">
-          <div class="stat-item">
-            <span class="stat-label">Total Registrations:</span>
-            <span class="stat-value" id="totalCount">0</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Last Registration:</span>
-            <span class="stat-value" id="lastRegistrationTime">None</span>
-          </div>
+        <div class="stat-item">
+          <span class="stat-label">Last Registered:</span>
+          <span class="stat-value" id="lastRegistrationTime">—</span>
         </div>
-
-        <!-- SPREADSHEET TABLE -->
-        <div class="table-responsive">
-          <table class="spreadsheet-table" id="spreadsheetTable">
-            <thead>
-              <tr>
-                <th class="col-num">Sl. No.</th>
-                <th class="col-name"><i class="fa-solid fa-user"></i> Participant Name</th>
-                <th class="col-programme"><i class="fa-solid fa-icons"></i> Programme</th>
-                <th class="col-detail"><i class="fa-solid fa-file-lines"></i> Topic / First Line of Song</th>
-                <th class="col-time"><i class="fa-solid fa-clock"></i> Registered At</th>
-              </tr>
-            </thead>
-            <tbody id="spreadsheetBody"></tbody>
-          </table>
-        </div>
-
-        <!-- EMPTY STATE -->
-        <div id="emptyState" class="empty-state hidden">
-          <i class="fa-solid fa-folder-open empty-icon"></i>
-          <h3>No Registrations Yet</h3>
-          <p>Share the registration link above to start collecting entries.</p>
-        </div>
-
       </div>
-    </main>
 
-    <!-- FOOTER -->
-    <footer class="app-footer">
-      <div class="footer-links" id="footerLinks"></div>
-      <p>&copy; Programme Registration Portal. All details secured.</p>
-    </footer>
+      <!-- TABLE -->
+      <div class="table-responsive">
+        <table class="spreadsheet-table" id="spreadsheetTable">
+          <thead>
+            <tr>
+              <th class="col-num">Sl. No.</th>
+              <th class="col-name"><i class="fa-solid fa-user"></i> Participant Name</th>
+              <th class="col-programme"><i class="fa-solid fa-icons"></i> Programme</th>
+              <th class="col-detail"><i class="fa-solid fa-file-lines"></i> Topic / First Line of Song</th>
+              <th class="col-time"><i class="fa-solid fa-clock"></i> Registered At</th>
+            </tr>
+          </thead>
+          <tbody id="spreadsheetBody"></tbody>
+        </table>
+      </div>
 
-  </div>
+      <div id="emptyState" class="empty-state hidden">
+        <i class="fa-solid fa-folder-open empty-icon"></i>
+        <h3>No Registrations Yet</h3>
+        <p>Share the link above to start receiving registrations.</p>
+      </div>
+    </div>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js"></script>
-  <script src="app.js"></script>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="app-footer">
+    <div class="footer-links" id="footerLinks"></div>
+    <p>&copy; Programme Registration Portal. All details secured.</p>
+  </footer>
+
+</div>
+
+<!-- Firebase SDK (loaded gracefully — app works without it) -->
+<script>
+  window._firebaseLoadError = false;
+</script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"
+        onerror="window._firebaseLoadError=true"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"
+        onerror="window._firebaseLoadError=true"></script>
+<script src="firebase-config.js"></script>
+<script src="app.js"></script>
+
 </body>
 </html>

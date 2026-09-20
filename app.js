@@ -1,246 +1,511 @@
 /**
- * PROGRAMME REGISTRATION PORTAL — APP LOGIC
- * Fixes: host routing for file:// protocol, multi-programme checkbox support
+ * PROGRAMME REGISTRATION PORTAL — APP LOGIC v3
+ * - Bulletproof host routing (file://, http://, Vercel)
+ * - Host password lock (default: host1234, changeable)
+ * - Participant edit mode after registration
+ * - Firebase optional (app fully works without it)
  */
 
-document.addEventListener('DOMContentLoaded', () => {
+(function () {
+  'use strict';
 
-  const STORAGE_KEY = 'programme_registrations_db';
-  let unsubscribeRealtime = null;
+  // ── CONSTANTS ────────────────────────────────────────────────
+  const STORAGE_KEY    = 'preg_registrations';
+  const PASSWORD_KEY   = 'preg_host_password';
+  const SESSION_KEY    = 'preg_host_authed';
+  const DEFAULT_PW     = 'host1234';
 
-  // Programmes that need "Topic" vs "First line of song"
-  const TOPIC_PROGRAMMES  = ['Malayalam Speech', 'Kathaprasangam', 'Conversation Malayalam'];
-  const SONG_PROGRAMMES   = ['Madh Song', 'Mappilappattu', 'Group Song'];
+  const TOPIC_PROGS = ['Malayalam Speech', 'Kathaprasangam', 'Conversation Malayalam'];
 
-  // ── DOM refs ────────────────────────────────────────────────────────────────
-  const navModeIndicator     = document.getElementById('navModeIndicator');
-  const participantView      = document.getElementById('participantView');
-  const hostView             = document.getElementById('hostView');
-  const footerLinks          = document.getElementById('footerLinks');
+  // ── STATE ────────────────────────────────────────────────────
+  let editingIds  = [];   // IDs of records currently being edited
+  let editingName = '';
+  let unsubscribe = null;
 
-  const registrationForm     = document.getElementById('registrationForm');
-  const participantNameInput = document.getElementById('participantName');
-  const programmeError       = document.getElementById('programmeError');
-  const successCard          = document.getElementById('successCard');
-  const registeredName       = document.getElementById('registeredName');
-  const registrationSummaryBox = document.getElementById('registrationSummaryBox');
-  const newRegistrationBtn   = document.getElementById('newRegistrationBtn');
+  // ── HELPERS ─────────────────────────────────────────────────
+  const $  = id => document.getElementById(id);
+  const esc = s  => !s ? '' :
+    s.replace(/&/g,'&amp;').replace(/</g,'&lt;')
+     .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 
-  const participantLinkInput = document.getElementById('participantLinkInput');
-  const copyLinkBtn          = document.getElementById('copyLinkBtn');
-  const copyBtnText          = document.getElementById('copyBtnText');
-  const searchInput          = document.getElementById('searchInput');
-  const exportCsvBtn         = document.getElementById('exportCsvBtn');
-  const addSampleDataBtn     = document.getElementById('addSampleDataBtn');
-  const clearDataBtn         = document.getElementById('clearDataBtn');
-  const totalCountEl         = document.getElementById('totalCount');
-  const lastRegistrationTimeEl = document.getElementById('lastRegistrationTime');
-  const spreadsheetTable     = document.getElementById('spreadsheetTable');
-  const spreadsheetBody      = document.getElementById('spreadsheetBody');
-  const emptyState           = document.getElementById('emptyState');
-
-  // ── INIT ────────────────────────────────────────────────────────────────────
-  initApp();
-
-  function initApp() {
-    const view = getActiveView();
-    setupRoutingUI(view);
-    setupEventListeners();
-    if (view === 'host') renderHostDashboard();
+  function getStoredPassword () {
+    return localStorage.getItem(PASSWORD_KEY) || DEFAULT_PW;
   }
 
-  // ── ROUTING ─────────────────────────────────────────────────────────────────
-  // Works for both http:// server AND file:// direct open
-  function getActiveView() {
-    const params  = new URLSearchParams(window.location.search);
-    const hash    = window.location.hash.toLowerCase();   // supports #host / #register
-    const path    = window.location.pathname.toLowerCase();
+  function getStoredRegistrations () {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+    catch (_) { return []; }
+  }
 
-    if (
-      params.get('view') === 'host' ||
-      hash === '#host' ||
-      hash === '#/host' ||
-      path.endsWith('/host') ||
-      path.endsWith('/host.html')
-    ) {
+  function saveAllToStorage (records) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  }
+
+  function isFirebaseReady () {
+    return !window._firebaseLoadError &&
+           typeof db !== 'undefined' && db !== null;
+  }
+
+  // ── ROUTING ─────────────────────────────────────────────────
+  function getView () {
+    const p = new URLSearchParams(window.location.search);
+    const h = window.location.hash.replace('#','').toLowerCase();
+    const n = window.location.pathname.toLowerCase();
+    if (p.get('view') === 'host' || h === 'host' || n.endsWith('/host'))
       return 'host';
-    }
     return 'participant';
   }
 
-  function getParticipantUrl() {
-    // For file:// protocol use hash-based routing so links are clickable
+  function baseUrl () {
+    // file:// → use the .html file path
+    // http://  → use origin
     if (window.location.protocol === 'file:') {
-      return window.location.href.split('?')[0].split('#')[0] + '?view=register';
+      return window.location.pathname; // just the path, search/hash stripped
+    }
+    return window.location.origin;
+  }
+
+  function getParticipantUrl () {
+    if (window.location.protocol === 'file:') {
+      const base = window.location.href.split('?')[0].split('#')[0];
+      return base + '?view=register';
     }
     return window.location.origin + '/register';
   }
 
-  function getHostUrl() {
+  function getHostUrl () {
     if (window.location.protocol === 'file:') {
-      return window.location.href.split('?')[0].split('#')[0] + '?view=host';
+      const base = window.location.href.split('?')[0].split('#')[0];
+      return base + '?view=host';
     }
     return window.location.origin + '/host';
   }
 
-  function setupRoutingUI(view) {
-    if (view === 'host') {
-      hostView.classList.remove('hidden');
-      participantView.classList.add('hidden');
-      navModeIndicator.innerHTML = `
-        <span class="badge-mode badge-host">
-          <i class="fa-solid fa-lock"></i> Host Admin Portal
-        </span>`;
-      footerLinks.innerHTML = `
-        <a href="${getParticipantUrl()}">
-          <i class="fa-solid fa-user-pen"></i> Go to Participant Registration Page
-        </a>`;
-    } else {
-      participantView.classList.remove('hidden');
-      hostView.classList.add('hidden');
-      navModeIndicator.innerHTML = `
-        <span class="badge-mode badge-participant">
-          <i class="fa-solid fa-user"></i> Participant Registration
-        </span>`;
-      footerLinks.innerHTML = `
-        <a href="${getHostUrl()}">
-          <i class="fa-solid fa-shield-halved"></i> Host Admin Dashboard
-        </a>`;
-    }
-  }
+  // ── INIT ─────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    const view = getView();
 
-  // ── EVENT LISTENERS ─────────────────────────────────────────────────────────
-  function setupEventListeners() {
-    // Programme checkboxes → show/hide detail input
+    if (view === 'host') {
+      initHostView();
+    } else {
+      initParticipantView();
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════
+  //  PARTICIPANT VIEW
+  // ════════════════════════════════════════════════════════════
+  function initParticipantView () {
+    $('participantView').classList.remove('hidden');
+    $('hostView').classList.add('hidden');
+
+    $('navModeIndicator').innerHTML = `
+      <span class="badge-mode badge-participant">
+        <i class="fa-solid fa-user"></i> Participant Registration
+      </span>`;
+
+    $('footerLinks').innerHTML =
+      `<a href="${getHostUrl()}"><i class="fa-solid fa-shield-halved"></i> Host Admin Dashboard</a>`;
+
+    // Checkbox → reveal detail input
     document.querySelectorAll('.programme-check').forEach(cb => {
       cb.addEventListener('change', () => {
-        const row    = cb.closest('.programme-row');
-        const detail = row.querySelector('.programme-detail');
-        const input  = row.querySelector('.detail-input');
+        const row   = cb.closest('.programme-row');
+        const det   = row.querySelector('.prog-detail');
+        const inp   = row.querySelector('.detail-input');
         if (cb.checked) {
-          detail.classList.remove('hidden');
-          input.setAttribute('required', 'true');
+          det.classList.remove('hidden');
+          inp.focus();
         } else {
-          detail.classList.add('hidden');
-          input.removeAttribute('required');
-          input.value = '';
+          det.classList.add('hidden');
+          inp.value = '';
+          inp.style.borderColor = '';
         }
-        programmeError.classList.add('hidden');
+        $('programmeError').classList.add('hidden');
       });
     });
 
-    registrationForm.addEventListener('submit', handleFormSubmit);
-    newRegistrationBtn.addEventListener('click', resetFormView);
-
-    if (copyLinkBtn)     copyLinkBtn.addEventListener('click', handleCopyLink);
-    if (searchInput)     searchInput.addEventListener('input', handleSearch);
-    if (exportCsvBtn)    exportCsvBtn.addEventListener('click', exportToCsv);
-    if (addSampleDataBtn) addSampleDataBtn.addEventListener('click', addSampleData);
-    if (clearDataBtn)    clearDataBtn.addEventListener('click', clearAllRegistrations);
-
-    // Cross-tab local storage sync (when Firebase is not configured)
-    window.addEventListener('storage', e => {
-      if (e.key === STORAGE_KEY && getActiveView() === 'host' && !isFirebaseReady()) {
-        renderHostDashboard();
-      }
-    });
+    $('registrationForm').addEventListener('submit', handleFormSubmit);
+    $('newRegistrationBtn').addEventListener('click', resetToNewRegistration);
+    $('editRegistrationBtn').addEventListener('click', handleEditClick);
   }
 
-  // ── FORM SUBMISSION ─────────────────────────────────────────────────────────
-  async function handleFormSubmit(e) {
+  // ── FORM SUBMIT ──────────────────────────────────────────────
+  async function handleFormSubmit (e) {
     e.preventDefault();
 
-    const name = participantNameInput.value.trim();
-    if (!name) { participantNameInput.focus(); return; }
-
-    // Collect all checked programmes with their detail
-    const selectedProgrammes = [];
-    document.querySelectorAll('.programme-row').forEach(row => {
-      const cb     = row.querySelector('.programme-check');
-      const input  = row.querySelector('.detail-input');
-      if (cb.checked) {
-        const prog       = cb.value;
-        const detailVal  = input ? input.value.trim() : '';
-        const detailType = TOPIC_PROGRAMMES.includes(prog) ? 'Topic' : 'First line of the song';
-        selectedProgrammes.push({ programme: prog, detail: detailVal, detailType });
-      }
-    });
-
-    if (selectedProgrammes.length === 0) {
-      programmeError.classList.remove('hidden');
+    const name = $('participantName').value.trim();
+    if (!name) {
+      $('nameError').classList.remove('hidden');
+      $('participantName').focus();
       return;
     }
+    $('nameError').classList.add('hidden');
 
-    // Check all selected programmes have their detail filled
-    let missingDetail = false;
+    // Collect checked programmes
+    const selected = [];
+    let hasError   = false;
+
     document.querySelectorAll('.programme-row').forEach(row => {
-      const cb    = row.querySelector('.programme-check');
-      const input = row.querySelector('.detail-input');
-      if (cb.checked && input && !input.value.trim()) {
-        input.focus();
-        input.style.borderColor = '#ef4444';
-        missingDetail = true;
-      }
-    });
-    if (missingDetail) return;
+      const cb  = row.querySelector('.programme-check');
+      const inp = row.querySelector('.detail-input');
+      if (!cb.checked) return;
 
-    // Build records — one row per programme per participant
+      const detail = inp.value.trim();
+      if (!detail) {
+        inp.style.borderColor = '#ef4444';
+        inp.focus();
+        hasError = true;
+        return;
+      }
+      inp.style.borderColor = '';
+
+      const isTopicProg = TOPIC_PROGS.includes(cb.value);
+      selected.push({
+        programme:  cb.value,
+        detail,
+        detailType: isTopicProg ? 'Topic' : 'First line of the song'
+      });
+    });
+
+    if (selected.length === 0) {
+      $('programmeError').classList.remove('hidden');
+      return;
+    }
+    if (hasError) return;
+
     const timestamp = new Date().toISOString();
-    const records   = selectedProgrammes.map(p => ({
-      id:          Date.now().toString() + Math.random().toString(36).slice(2),
+
+    // If editing — remove old records first
+    if (editingIds.length > 0) {
+      await deleteRecordsByIds(editingIds);
+      editingIds = [];
+    }
+
+    // Build new records (one per programme)
+    const newRecords = selected.map(p => ({
+      id:         Date.now().toString(36) + Math.random().toString(36).slice(2),
       name,
-      programme:   p.programme,
-      detail:      p.detail,
-      detailType:  p.detailType,
+      programme:  p.programme,
+      detail:     p.detail,
+      detailType: p.detailType,
       timestamp
     }));
 
-    for (const r of records) {
-      await saveRegistrationRecord(r);
+    for (const r of newRecords) {
+      await saveRecord(r);
     }
 
-    // Show success
-    registeredName.textContent = name;
-    registrationSummaryBox.innerHTML = records.map(r => `
-      <div class="summary-row">
-        <span class="summary-programme">${escapeHtml(r.programme)}</span>
-        <span class="summary-detail"><strong>${escapeHtml(r.detailType)}:</strong> ${escapeHtml(r.detail)}</span>
-      </div>
-    `).join('');
+    // Stash IDs for possible re-edit
+    editingIds  = newRecords.map(r => r.id);
+    editingName = name;
 
-    registrationForm.classList.add('hidden');
-    successCard.classList.remove('hidden');
-    successCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    showSuccessCard(name, newRecords, editingIds.length > 0);
   }
 
-  function resetFormView() {
-    registrationForm.reset();
-    // Hide all detail inputs
-    document.querySelectorAll('.programme-detail').forEach(d => d.classList.add('hidden'));
+  function showSuccessCard (name, records, isEdit) {
+    $('registeredName').textContent = name;
+    $('successTitle').textContent   = isEdit
+      ? 'Registration Updated!'
+      : 'Registration Successful!';
+
+    $('registrationSummaryBox').innerHTML = records.map(r => `
+      <div class="summary-row">
+        <span class="summary-programme">${esc(r.programme)}</span>
+        <span class="summary-detail">
+          <strong>${esc(r.detailType)}:</strong> ${esc(r.detail)}
+        </span>
+      </div>`).join('');
+
+    $('registrationForm').classList.add('hidden');
+    $('successCard').classList.remove('hidden');
+    $('successCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  // ── EDIT CLICK ───────────────────────────────────────────────
+  function handleEditClick () {
+    // Pre-fill form with previously submitted data
+    const allRecords = getStoredRegistrations();
+    const myRecords  = allRecords.filter(r => editingIds.includes(r.id));
+
+    // Reset checkboxes
+    document.querySelectorAll('.programme-check').forEach(cb => {
+      cb.checked = false;
+      const row = cb.closest('.programme-row');
+      row.querySelector('.prog-detail').classList.add('hidden');
+      row.querySelector('.detail-input').value = '';
+    });
+
+    // Re-check and fill
+    myRecords.forEach(r => {
+      const cb = document.querySelector(`.programme-check[value="${CSS.escape(r.programme)}"]`);
+      if (!cb) return;
+      cb.checked = true;
+      const row  = cb.closest('.programme-row');
+      row.querySelector('.prog-detail').classList.remove('hidden');
+      row.querySelector('.detail-input').value = r.detail;
+    });
+
+    $('participantName').value = editingName;
+    $('submitBtnText').textContent = 'Update Registration';
+
+    $('successCard').classList.add('hidden');
+    $('registrationForm').classList.remove('hidden');
+  }
+
+  // ── RESET TO FRESH FORM ──────────────────────────────────────
+  function resetToNewRegistration () {
+    editingIds  = [];
+    editingName = '';
+
+    $('registrationForm').reset();
+    document.querySelectorAll('.prog-detail').forEach(d => d.classList.add('hidden'));
     document.querySelectorAll('.detail-input').forEach(i => {
-      i.removeAttribute('required');
+      i.value = '';
       i.style.borderColor = '';
     });
-    programmeError.classList.add('hidden');
-    successCard.classList.add('hidden');
-    registrationForm.classList.remove('hidden');
+    $('programmeError').classList.add('hidden');
+    $('nameError').classList.add('hidden');
+    $('submitBtnText').textContent = 'Register Now';
+
+    $('successCard').classList.add('hidden');
+    $('registrationForm').classList.remove('hidden');
   }
 
-  // ── STORAGE (Firebase → REST API → localStorage) ────────────────────────────
-  function isFirebaseReady() {
-    return typeof db !== 'undefined' && db !== null;
-  }
 
-  async function saveRegistrationRecord(record) {
-    // 1. Firebase Firestore
-    if (isFirebaseReady()) {
-      try {
-        await db.collection('registrations').add(record);
-      } catch (err) {
-        console.error('Firestore save error:', err);
-      }
+  // ════════════════════════════════════════════════════════════
+  //  HOST VIEW — PASSWORD GATE
+  // ════════════════════════════════════════════════════════════
+  function initHostView () {
+    // Check if already authenticated this session
+    if (sessionStorage.getItem(SESSION_KEY) === '1') {
+      showHostDashboard();
+    } else {
+      showPasswordModal();
     }
-    // 2. Local REST API (when server.ps1 is running)
+  }
+
+  function showPasswordModal () {
+    const overlay = $('passwordOverlay');
+    overlay.classList.remove('hidden');
+
+    $('hostPasswordInput').value = '';
+    $('passwordError').classList.add('hidden');
+    setTimeout(() => $('hostPasswordInput').focus(), 100);
+
+    $('submitPasswordBtn').onclick = checkPassword;
+    $('hostPasswordInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') checkPassword();
+    });
+  }
+
+  function checkPassword () {
+    const entered = $('hostPasswordInput').value;
+    if (entered === getStoredPassword()) {
+      sessionStorage.setItem(SESSION_KEY, '1');
+      $('passwordOverlay').classList.add('hidden');
+      showHostDashboard();
+    } else {
+      $('passwordError').classList.remove('hidden');
+      $('hostPasswordInput').value = '';
+      $('hostPasswordInput').focus();
+    }
+  }
+
+  function showHostDashboard () {
+    $('hostView').classList.remove('hidden');
+    $('participantView').classList.add('hidden');
+
+    $('navModeIndicator').innerHTML = `
+      <span class="badge-mode badge-host">
+        <i class="fa-solid fa-lock"></i> Host Admin Portal
+      </span>`;
+
+    $('footerLinks').innerHTML =
+      `<a href="${getParticipantUrl()}"><i class="fa-solid fa-user-pen"></i> Participant Registration Page</a>`;
+
+    $('participantLinkInput').value = getParticipantUrl();
+
+    // Wire up host buttons
+    $('copyLinkBtn').addEventListener('click', handleCopyLink);
+    $('searchInput').addEventListener('input', handleSearch);
+    $('exportCsvBtn').addEventListener('click', exportToCsv);
+    $('addSampleDataBtn').addEventListener('click', addSampleData);
+    $('clearDataBtn').addEventListener('click', clearAllRegistrations);
+    $('changePasswordBtn').addEventListener('click', showChangePasswordModal);
+
+    loadAndRenderDashboard();
+  }
+
+  // ── CHANGE PASSWORD MODAL ────────────────────────────────────
+  function showChangePasswordModal () {
+    $('changePasswordOverlay').classList.remove('hidden');
+    $('currentPasswordInput').value = '';
+    $('newPasswordInput').value     = '';
+    $('confirmPasswordInput').value = '';
+    $('changePwError').classList.add('hidden');
+    $('changePwSuccess').classList.add('hidden');
+    setTimeout(() => $('currentPasswordInput').focus(), 100);
+
+    $('savePasswordBtn').onclick = doChangePassword;
+    $('cancelPasswordBtn').onclick = () => {
+      $('changePasswordOverlay').classList.add('hidden');
+    };
+  }
+
+  function doChangePassword () {
+    const current  = $('currentPasswordInput').value;
+    const newPw    = $('newPasswordInput').value;
+    const confirm  = $('confirmPasswordInput').value;
+    const errEl    = $('changePwError');
+    const okEl     = $('changePwSuccess');
+
+    errEl.classList.add('hidden');
+    okEl.classList.add('hidden');
+
+    if (current !== getStoredPassword()) {
+      errEl.textContent = 'Current password is incorrect.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    if (newPw.length < 4) {
+      errEl.textContent = 'New password must be at least 4 characters.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    if (newPw !== confirm) {
+      errEl.textContent = 'Passwords do not match.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+
+    localStorage.setItem(PASSWORD_KEY, newPw);
+    okEl.classList.remove('hidden');
+    setTimeout(() => $('changePasswordOverlay').classList.add('hidden'), 1500);
+  }
+
+  // ── LOAD & RENDER DASHBOARD ──────────────────────────────────
+  async function loadAndRenderDashboard () {
+    if (isFirebaseReady()) {
+      // Real-time Firestore listener
+      if (unsubscribe) unsubscribe();
+      try {
+        unsubscribe = db.collection('registrations').onSnapshot(snap => {
+          const records = [];
+          snap.forEach(doc => records.push({ id: doc.id, ...doc.data() }));
+          records.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+          saveAllToStorage(records);
+          renderRows(records);
+        }, err => {
+          console.warn('Firestore listener failed, falling back:', err);
+          renderRows(getStoredRegistrations());
+        });
+      } catch (err) {
+        renderRows(getStoredRegistrations());
+      }
+    } else {
+      renderRows(getStoredRegistrations());
+    }
+  }
+
+  function renderRows (records) {
+    const tbody      = $('spreadsheetBody');
+    const table      = $('spreadsheetTable');
+    const empty      = $('emptyState');
+    const totalEl    = $('totalCount');
+    const lastEl     = $('lastRegistrationTime');
+
+    tbody.innerHTML = '';
+
+    if (!records || records.length === 0) {
+      table.classList.add('hidden');
+      empty.classList.remove('hidden');
+      totalEl.textContent = '0';
+      lastEl.textContent  = '—';
+      return;
+    }
+
+    table.classList.remove('hidden');
+    empty.classList.add('hidden');
+    totalEl.textContent = records.length;
+
+    const last = records[records.length - 1];
+    if (last && last.timestamp) {
+      const d = new Date(last.timestamp);
+      lastEl.textContent =
+        d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) +
+        ' · ' + d.toLocaleDateString();
+    }
+
+    records.forEach((r, i) => {
+      const tr     = document.createElement('tr');
+      const dtStr  = r.timestamp
+        ? new Date(r.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : '—';
+
+      tr.innerHTML = `
+        <td class="col-num">${i + 1}</td>
+        <td class="col-name">${esc(r.name)}</td>
+        <td class="col-programme"><span class="programme-tag">${esc(r.programme)}</span></td>
+        <td class="col-detail">
+          <span class="detail-type-badge">${esc(r.detailType || '')}</span>
+          ${esc(r.detail)}
+        </td>
+        <td class="col-time">${dtStr}</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ── SEARCH ───────────────────────────────────────────────────
+  function handleSearch () {
+    const q   = $('searchInput').value.toLowerCase().trim();
+    const all = getStoredRegistrations();
+    if (!q) { renderRows(all); return; }
+    renderRows(all.filter(r =>
+      (r.name      || '').toLowerCase().includes(q) ||
+      (r.programme || '').toLowerCase().includes(q) ||
+      (r.detail    || '').toLowerCase().includes(q)
+    ));
+  }
+
+  // ── COPY LINK ────────────────────────────────────────────────
+  function handleCopyLink () {
+    const text = $('participantLinkInput').value;
+    if (!text) return;
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(flashCopied).catch(() => fallbackCopy(text));
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  function fallbackCopy (text) {
+    const inp = $('participantLinkInput');
+    inp.select();
+    inp.setSelectionRange(0, 99999);
+    try { document.execCommand('copy'); flashCopied(); }
+    catch (_) { alert('Copy this link:\n' + text); }
+  }
+
+  function flashCopied () {
+    const btn  = $('copyLinkBtn');
+    const span = $('copyBtnText');
+    span.textContent          = 'Copied!';
+    btn.style.backgroundColor = '#10b981';
+    setTimeout(() => {
+      span.textContent          = 'Copy Link';
+      btn.style.backgroundColor = '';
+    }, 2500);
+  }
+
+  // ── STORAGE: SAVE ────────────────────────────────────────────
+  async function saveRecord (record) {
+    // 1. Firebase
+    if (isFirebaseReady()) {
+      try { await db.collection('registrations').add(record); }
+      catch (e) { console.error('Firestore save error:', e); }
+    }
+    // 2. REST API (local server)
     try {
       await fetch('/api/register', {
         method: 'POST',
@@ -248,190 +513,51 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify(record)
       });
     } catch (_) {}
-    // 3. Always localStorage
-    const existing = getStoredRegistrations();
-    existing.push(record);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+    // 3. localStorage (always)
+    const all = getStoredRegistrations();
+    all.push(record);
+    saveAllToStorage(all);
   }
 
-  function getStoredRegistrations() {
-    try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    } catch (_) {
-      return [];
-    }
-  }
+  // ── STORAGE: DELETE ──────────────────────────────────────────
+  async function deleteRecordsByIds (ids) {
+    // localStorage
+    const all     = getStoredRegistrations();
+    const updated = all.filter(r => !ids.includes(r.id));
+    saveAllToStorage(updated);
 
-  async function fetchAllRegistrations() {
-    // 1. Firebase
+    // Firebase
     if (isFirebaseReady()) {
       try {
-        const snap    = await db.collection('registrations').get();
-        const records = [];
-        snap.forEach(doc => records.push({ id: doc.id, ...doc.data() }));
-        records.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
-        if (records.length > 0) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-          return records;
-        }
-      } catch (err) {
-        console.warn('Firestore fetch failed:', err);
-      }
-    }
-    // 2. REST API
-    try {
-      const res = await fetch('/api/registrations');
-      if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-        return data;
-      }
-    } catch (_) {}
-    // 3. localStorage
-    return getStoredRegistrations();
-  }
-
-  // ── HOST DASHBOARD ───────────────────────────────────────────────────────────
-  async function renderHostDashboard() {
-    participantLinkInput.value = getParticipantUrl();
-
-    if (isFirebaseReady()) {
-      // Real-time listener
-      if (unsubscribeRealtime) unsubscribeRealtime();
-      unsubscribeRealtime = db.collection('registrations').onSnapshot(snap => {
-        const records = [];
-        snap.forEach(doc => records.push({ id: doc.id, ...doc.data() }));
-        records.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-        renderSpreadsheetRows(records);
-      }, err => console.error('Firestore listener error:', err));
-    } else {
-      const records = await fetchAllRegistrations();
-      renderSpreadsheetRows(records);
+        const snap = await db.collection('registrations')
+          .where('id', 'in', ids).get();
+        snap.forEach(doc => doc.ref.delete());
+      } catch (_) {}
     }
   }
 
-  function renderSpreadsheetRows(records) {
-    spreadsheetBody.innerHTML = '';
-
-    if (!records || records.length === 0) {
-      spreadsheetTable.classList.add('hidden');
-      emptyState.classList.remove('hidden');
-      totalCountEl.textContent = '0';
-      lastRegistrationTimeEl.textContent = 'None';
-      return;
-    }
-
-    spreadsheetTable.classList.remove('hidden');
-    emptyState.classList.add('hidden');
-    totalCountEl.textContent = records.length;
-
-    const last = records[records.length - 1];
-    if (last && last.timestamp) {
-      const d = new Date(last.timestamp);
-      lastRegistrationTimeEl.textContent =
-        d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) +
-        ' (' + d.toLocaleDateString() + ')';
-    }
-
-    records.forEach((record, index) => {
-      const tr      = document.createElement('tr');
-      const dateStr = record.timestamp
-        ? new Date(record.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-        : 'Just now';
-
-      tr.innerHTML = `
-        <td class="col-num">${index + 1}</td>
-        <td class="col-name">${escapeHtml(record.name)}</td>
-        <td class="col-programme">
-          <span class="programme-tag">${escapeHtml(record.programme)}</span>
-        </td>
-        <td class="col-detail">
-          <span class="detail-type-badge">${escapeHtml(record.detailType || '')}</span>
-          ${escapeHtml(record.detail)}
-        </td>
-        <td class="col-time">${dateStr}</td>
-      `;
-      spreadsheetBody.appendChild(tr);
-    });
-  }
-
-  // ── COPY LINK ────────────────────────────────────────────────────────────────
-  function handleCopyLink() {
-    const text = participantLinkInput.value;
-    if (!text) return;
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).then(showCopySuccess).catch(() => fallbackCopy(text));
-    } else {
-      fallbackCopy(text);
-    }
-  }
-
-  function fallbackCopy(text) {
-    participantLinkInput.select();
-    participantLinkInput.setSelectionRange(0, 99999);
-    try { document.execCommand('copy'); showCopySuccess(); }
-    catch (_) { alert('Copy this link:\n' + text); }
-  }
-
-  function showCopySuccess() {
-    copyBtnText.textContent = 'Copied!';
-    copyLinkBtn.style.backgroundColor = '#10b981';
-    setTimeout(() => {
-      copyBtnText.textContent = 'Copy Link';
-      copyLinkBtn.style.backgroundColor = '';
-    }, 2500);
-  }
-
-  // ── SEARCH ───────────────────────────────────────────────────────────────────
-  async function handleSearch() {
-    const q       = searchInput.value.toLowerCase().trim();
-    const records = await fetchAllRegistrations();
-    if (!q) { renderSpreadsheetRows(records); return; }
-    renderSpreadsheetRows(records.filter(r =>
-      r.name.toLowerCase().includes(q) ||
-      r.programme.toLowerCase().includes(q) ||
-      r.detail.toLowerCase().includes(q)
-    ));
-  }
-
-  // ── EXPORT CSV ───────────────────────────────────────────────────────────────
-  async function exportToCsv() {
-    const records = await fetchAllRegistrations();
-    if (!records || records.length === 0) { alert('No registrations to export.'); return; }
-
-    let csv = '"Sl. No.","Participant Name","Programme","Detail Type","Topic / First Line of Song","Registered At"\n';
-    records.forEach((r, i) => {
-      const t = r.timestamp ? new Date(r.timestamp).toLocaleString() : '';
-      csv += [i + 1, q(r.name), q(r.programme), q(r.detailType || ''), q(r.detail), q(t)].join(',') + '\n';
-    });
-
-    const a = document.createElement('a');
-    a.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
-    a.download = `Programme_Registrations_${new Date().toISOString().slice(0,10)}.csv`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  }
-
-  function q(s) { return '"' + (s || '').replace(/"/g, '""') + '"'; }
-
-  // ── SAMPLE DATA ──────────────────────────────────────────────────────────────
-  async function addSampleData() {
+  // ── SAMPLE DATA ──────────────────────────────────────────────
+  async function addSampleData () {
     const samples = [
-      { name: 'Ahammad Firoz',  programme: 'Malayalam Speech',     detail: 'Importance of Modern Education', detailType: 'Topic' },
-      { name: 'Fathima Raniya', programme: 'Madh Song',            detail: 'Aalamangal Seyyum Rasool',       detailType: 'First line of the song' },
-      { name: 'Fathima Raniya', programme: 'Mappilappattu',        detail: 'Ponnana Maanathu Ninnoru',       detailType: 'First line of the song' },
-      { name: 'Mohammed Bilal', programme: 'Kathaprasangam',       detail: 'Veera Pazhassi Raja',            detailType: 'Topic' },
-      { name: 'Suhail & Team',  programme: 'Group Song',           detail: 'Assalamu Alaika Ya Rasoolallah', detailType: 'First line of the song' },
+      { name:'Ahammad Firoz',   programme:'Malayalam Speech',    detail:'Importance of Modern Education',      detailType:'Topic' },
+      { name:'Fathima Raniya',  programme:'Madh Song',           detail:'Aalamangal Seyyum Rasool',            detailType:'First line of the song' },
+      { name:'Fathima Raniya',  programme:'Mappilappattu',       detail:'Ponnana Maanathu Ninnoru',            detailType:'First line of the song' },
+      { name:'Mohammed Bilal',  programme:'Kathaprasangam',      detail:'Veera Pazhassi Raja',                 detailType:'Topic' },
+      { name:'Suhail & Team',   programme:'Group Song',          detail:'Assalamu Alaika Ya Rasoolallah',      detailType:'First line of the song' },
     ];
-    const now = new Date().toISOString();
+    const ts = new Date().toISOString();
     for (const s of samples) {
-      await saveRegistrationRecord({ ...s, id: Date.now().toString() + Math.random(), timestamp: now });
+      await saveRecord({
+        ...s,
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+        timestamp: ts
+      });
     }
-    renderHostDashboard();
+    loadAndRenderDashboard();
   }
 
-  // ── CLEAR DATA ───────────────────────────────────────────────────────────────
-  async function clearAllRegistrations() {
+  // ── CLEAR ALL ────────────────────────────────────────────────
+  async function clearAllRegistrations () {
     if (!confirm('Clear ALL registrations? This cannot be undone.')) return;
     localStorage.removeItem(STORAGE_KEY);
     if (isFirebaseReady()) {
@@ -441,14 +567,26 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (_) {}
     }
     try { await fetch('/api/clear', { method: 'POST' }); } catch (_) {}
-    renderHostDashboard();
+    renderRows([]);
   }
 
-  // ── UTILS ────────────────────────────────────────────────────────────────────
-  function escapeHtml(s) {
-    if (!s) return '';
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-            .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+  // ── EXPORT CSV ───────────────────────────────────────────────
+  async function exportToCsv () {
+    const records = getStoredRegistrations();
+    if (!records.length) { alert('No registrations to export.'); return; }
+
+    let csv = '"Sl. No.","Participant Name","Programme","Detail Type","Topic / First Line","Registered At"\n';
+    records.forEach((r, i) => {
+      const t = r.timestamp ? new Date(r.timestamp).toLocaleString() : '';
+      csv += [i+1, q(r.name), q(r.programme), q(r.detailType||''), q(r.detail), q(t)].join(',') + '\n';
+    });
+
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
+    a.download = `Registrations_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
   }
 
-});
+  function q (s) { return '"' + (s||'').replace(/"/g,'""') + '"'; }
+
+})();
