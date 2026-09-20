@@ -1,235 +1,212 @@
 /**
- * PROGRAMME REGISTRATION PORTAL - APP LOGIC
- * Supports Browser LocalStorage, REST API Backend, and Live Firebase Firestore Cloud Database.
+ * PROGRAMME REGISTRATION PORTAL — APP LOGIC
+ * Fixes: host routing for file:// protocol, multi-programme checkbox support
  */
 
 document.addEventListener('DOMContentLoaded', () => {
 
-  // --- STATE & CONSTANTS ---
   const STORAGE_KEY = 'programme_registrations_db';
   let unsubscribeRealtime = null;
-  
-  // Programmes that require "Topic"
-  const TOPIC_PROGRAMMES = [
-    'Malayalam Speech',
-    'Kathaprasangam',
-    'Conversation Malayalam'
-  ];
 
-  // Programmes that require "First line of the song"
-  const SONG_PROGRAMMES = [
-    'Madh Song',
-    'Mappilappattu',
-    'Group Song'
-  ];
+  // Programmes that need "Topic" vs "First line of song"
+  const TOPIC_PROGRAMMES  = ['Malayalam Speech', 'Kathaprasangam', 'Conversation Malayalam'];
+  const SONG_PROGRAMMES   = ['Madh Song', 'Mappilappattu', 'Group Song'];
 
-  // --- DOM ELEMENTS ---
-  const navModeIndicator = document.getElementById('navModeIndicator');
-  const participantView = document.getElementById('participantView');
-  const hostView = document.getElementById('hostView');
-  const footerLinks = document.getElementById('footerLinks');
+  // ── DOM refs ────────────────────────────────────────────────────────────────
+  const navModeIndicator     = document.getElementById('navModeIndicator');
+  const participantView      = document.getElementById('participantView');
+  const hostView             = document.getElementById('hostView');
+  const footerLinks          = document.getElementById('footerLinks');
 
-  // Form Elements
-  const registrationForm = document.getElementById('registrationForm');
+  const registrationForm     = document.getElementById('registrationForm');
   const participantNameInput = document.getElementById('participantName');
-  const programmeSelect = document.getElementById('programmeSelect');
-  const dynamicDetailGroup = document.getElementById('dynamicDetailGroup');
-  const dynamicDetailLabel = document.getElementById('dynamicDetailLabel');
-  const dynamicLabelText = document.getElementById('dynamicLabelText');
-  const dynamicDetailIcon = document.getElementById('dynamicDetailIcon');
-  const detailInput = document.getElementById('detailInput');
-  const dynamicHelpText = document.getElementById('dynamicHelpText');
+  const programmeError       = document.getElementById('programmeError');
+  const successCard          = document.getElementById('successCard');
+  const registeredName       = document.getElementById('registeredName');
+  const registrationSummaryBox = document.getElementById('registrationSummaryBox');
+  const newRegistrationBtn   = document.getElementById('newRegistrationBtn');
 
-  // Success Screen Elements
-  const successCard = document.getElementById('successCard');
-  const registeredName = document.getElementById('registeredName');
-  const registeredProgramme = document.getElementById('registeredProgramme');
-  const registeredDetailHeader = document.getElementById('registeredDetailHeader');
-  const registeredDetailText = document.getElementById('registeredDetailText');
-  const newRegistrationBtn = document.getElementById('newRegistrationBtn');
-
-  // Host View Elements
   const participantLinkInput = document.getElementById('participantLinkInput');
-  const copyLinkBtn = document.getElementById('copyLinkBtn');
-  const copyBtnText = document.getElementById('copyBtnText');
-  const searchInput = document.getElementById('searchInput');
-  const exportCsvBtn = document.getElementById('exportCsvBtn');
-  const addSampleDataBtn = document.getElementById('addSampleDataBtn');
-  const clearDataBtn = document.getElementById('clearDataBtn');
-  const totalCountEl = document.getElementById('totalCount');
+  const copyLinkBtn          = document.getElementById('copyLinkBtn');
+  const copyBtnText          = document.getElementById('copyBtnText');
+  const searchInput          = document.getElementById('searchInput');
+  const exportCsvBtn         = document.getElementById('exportCsvBtn');
+  const addSampleDataBtn     = document.getElementById('addSampleDataBtn');
+  const clearDataBtn         = document.getElementById('clearDataBtn');
+  const totalCountEl         = document.getElementById('totalCount');
   const lastRegistrationTimeEl = document.getElementById('lastRegistrationTime');
-  const spreadsheetTable = document.getElementById('spreadsheetTable');
-  const spreadsheetBody = document.getElementById('spreadsheetBody');
-  const emptyState = document.getElementById('emptyState');
+  const spreadsheetTable     = document.getElementById('spreadsheetTable');
+  const spreadsheetBody      = document.getElementById('spreadsheetBody');
+  const emptyState           = document.getElementById('emptyState');
 
-  // --- INITIALIZATION ---
+  // ── INIT ────────────────────────────────────────────────────────────────────
   initApp();
 
   function initApp() {
-    const currentView = getActiveView();
-    setupRoutingUI(currentView);
+    const view = getActiveView();
+    setupRoutingUI(view);
     setupEventListeners();
-
-    if (currentView === 'host') {
-      renderHostDashboard();
-    }
+    if (view === 'host') renderHostDashboard();
   }
 
-  // --- ROUTING / VIEW MODE DETECTION ---
+  // ── ROUTING ─────────────────────────────────────────────────────────────────
+  // Works for both http:// server AND file:// direct open
   function getActiveView() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const pathname = window.location.pathname.toLowerCase();
+    const params  = new URLSearchParams(window.location.search);
+    const hash    = window.location.hash.toLowerCase();   // supports #host / #register
+    const path    = window.location.pathname.toLowerCase();
 
-    if (urlParams.get('view') === 'host' || pathname.endsWith('/host')) {
+    if (
+      params.get('view') === 'host' ||
+      hash === '#host' ||
+      hash === '#/host' ||
+      path.endsWith('/host') ||
+      path.endsWith('/host.html')
+    ) {
       return 'host';
     }
     return 'participant';
+  }
+
+  function getParticipantUrl() {
+    // For file:// protocol use hash-based routing so links are clickable
+    if (window.location.protocol === 'file:') {
+      return window.location.href.split('?')[0].split('#')[0] + '?view=register';
+    }
+    return window.location.origin + '/register';
+  }
+
+  function getHostUrl() {
+    if (window.location.protocol === 'file:') {
+      return window.location.href.split('?')[0].split('#')[0] + '?view=host';
+    }
+    return window.location.origin + '/host';
   }
 
   function setupRoutingUI(view) {
     if (view === 'host') {
       hostView.classList.remove('hidden');
       participantView.classList.add('hidden');
-
       navModeIndicator.innerHTML = `
         <span class="badge-mode badge-host">
           <i class="fa-solid fa-lock"></i> Host Admin Portal
-        </span>
-      `;
-
+        </span>`;
       footerLinks.innerHTML = `
-        <span>Viewing Host Dashboard. </span>
-        <a href="${getParticipantUrl()}" id="switchViewLink"><i class="fa-solid fa-user-pen"></i> Go to Participant Registration Page</a>
-      `;
+        <a href="${getParticipantUrl()}">
+          <i class="fa-solid fa-user-pen"></i> Go to Participant Registration Page
+        </a>`;
     } else {
       participantView.classList.remove('hidden');
       hostView.classList.add('hidden');
-
       navModeIndicator.innerHTML = `
         <span class="badge-mode badge-participant">
           <i class="fa-solid fa-user"></i> Participant Registration
-        </span>
-      `;
-
+        </span>`;
       footerLinks.innerHTML = `
-        <a href="${getHostUrl()}"><i class="fa-solid fa-shield-halved"></i> Host Admin Login / View</a>
-      `;
+        <a href="${getHostUrl()}">
+          <i class="fa-solid fa-shield-halved"></i> Host Admin Dashboard
+        </a>`;
     }
   }
 
-  function getParticipantUrl() {
-    const origin = window.location.origin;
-    if (origin.startsWith('http')) {
-      return origin + '/register';
-    }
-    return window.location.protocol + '//' + window.location.host + window.location.pathname + '?view=register';
-  }
-
-  function getHostUrl() {
-    const origin = window.location.origin;
-    if (origin.startsWith('http')) {
-      return origin + '/host';
-    }
-    return window.location.protocol + '//' + window.location.host + window.location.pathname + '?view=host';
-  }
-
-
-  // --- EVENT LISTENERS ---
+  // ── EVENT LISTENERS ─────────────────────────────────────────────────────────
   function setupEventListeners() {
-    programmeSelect.addEventListener('change', handleProgrammeChange);
+    // Programme checkboxes → show/hide detail input
+    document.querySelectorAll('.programme-check').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const row    = cb.closest('.programme-row');
+        const detail = row.querySelector('.programme-detail');
+        const input  = row.querySelector('.detail-input');
+        if (cb.checked) {
+          detail.classList.remove('hidden');
+          input.setAttribute('required', 'true');
+        } else {
+          detail.classList.add('hidden');
+          input.removeAttribute('required');
+          input.value = '';
+        }
+        programmeError.classList.add('hidden');
+      });
+    });
+
     registrationForm.addEventListener('submit', handleFormSubmit);
     newRegistrationBtn.addEventListener('click', resetFormView);
 
-    if (copyLinkBtn) {
-      copyLinkBtn.addEventListener('click', handleCopyLink);
-    }
-    if (searchInput) {
-      searchInput.addEventListener('input', handleSearch);
-    }
-    if (exportCsvBtn) {
-      exportCsvBtn.addEventListener('click', exportToCsv);
-    }
-    if (addSampleDataBtn) {
-      addSampleDataBtn.addEventListener('click', addSampleData);
-    }
-    if (clearDataBtn) {
-      clearDataBtn.addEventListener('click', clearAllRegistrations);
-    }
+    if (copyLinkBtn)     copyLinkBtn.addEventListener('click', handleCopyLink);
+    if (searchInput)     searchInput.addEventListener('input', handleSearch);
+    if (exportCsvBtn)    exportCsvBtn.addEventListener('click', exportToCsv);
+    if (addSampleDataBtn) addSampleDataBtn.addEventListener('click', addSampleData);
+    if (clearDataBtn)    clearDataBtn.addEventListener('click', clearAllRegistrations);
 
-    // Local Storage cross-tab listener
-    window.addEventListener('storage', (e) => {
-      if (e.key === STORAGE_KEY && getActiveView() === 'host' && !db) {
+    // Cross-tab local storage sync (when Firebase is not configured)
+    window.addEventListener('storage', e => {
+      if (e.key === STORAGE_KEY && getActiveView() === 'host' && !isFirebaseReady()) {
         renderHostDashboard();
       }
     });
   }
 
-
-  // --- DYNAMIC FIELD LOGIC (TOPIC vs FIRST LINE OF THE SONG) ---
-  function handleProgrammeChange() {
-    const selectedProgramme = programmeSelect.value;
-
-    if (!selectedProgramme) {
-      dynamicDetailGroup.classList.add('hidden');
-      detailInput.removeAttribute('required');
-      return;
-    }
-
-    dynamicDetailGroup.classList.remove('hidden');
-    detailInput.setAttribute('required', 'true');
-    detailInput.value = '';
-
-    if (TOPIC_PROGRAMMES.includes(selectedProgramme)) {
-      dynamicLabelText.textContent = 'Topic';
-      dynamicDetailIcon.className = 'fa-solid fa-heading';
-      detailInput.placeholder = 'Enter the topic of your speech / presentation';
-      dynamicHelpText.textContent = 'Provide the exact topic you will present.';
-    } else if (SONG_PROGRAMMES.includes(selectedProgramme)) {
-      dynamicLabelText.textContent = 'First line of the song';
-      dynamicDetailIcon.className = 'fa-solid fa-music';
-      detailInput.placeholder = 'Enter the first line of the song';
-      dynamicHelpText.textContent = 'Provide the opening line or title line of the song.';
-    } else {
-      dynamicLabelText.textContent = 'Detail';
-      dynamicDetailIcon.className = 'fa-solid fa-align-left';
-      detailInput.placeholder = 'Enter detail';
-      dynamicHelpText.textContent = 'Provide programme detail.';
-    }
-  }
-
-
-  // --- FORM SUBMISSION & STORAGE ---
+  // ── FORM SUBMISSION ─────────────────────────────────────────────────────────
   async function handleFormSubmit(e) {
     e.preventDefault();
 
     const name = participantNameInput.value.trim();
-    const programme = programmeSelect.value;
-    const detail = detailInput.value.trim();
-    const isTopic = TOPIC_PROGRAMMES.includes(programme);
-    const detailTypeLabel = isTopic ? 'Topic' : 'First line of the song';
+    if (!name) { participantNameInput.focus(); return; }
 
-    if (!name || !programme || !detail) {
-      alert('Please fill out all required fields.');
+    // Collect all checked programmes with their detail
+    const selectedProgrammes = [];
+    document.querySelectorAll('.programme-row').forEach(row => {
+      const cb     = row.querySelector('.programme-check');
+      const input  = row.querySelector('.detail-input');
+      if (cb.checked) {
+        const prog       = cb.value;
+        const detailVal  = input ? input.value.trim() : '';
+        const detailType = TOPIC_PROGRAMMES.includes(prog) ? 'Topic' : 'First line of the song';
+        selectedProgrammes.push({ programme: prog, detail: detailVal, detailType });
+      }
+    });
+
+    if (selectedProgrammes.length === 0) {
+      programmeError.classList.remove('hidden');
       return;
     }
 
-    const newRecord = {
-      id: Date.now().toString(),
-      name: name,
-      programme: programme,
-      detail: detail,
-      detailType: detailTypeLabel,
-      timestamp: new Date().toISOString()
-    };
+    // Check all selected programmes have their detail filled
+    let missingDetail = false;
+    document.querySelectorAll('.programme-row').forEach(row => {
+      const cb    = row.querySelector('.programme-check');
+      const input = row.querySelector('.detail-input');
+      if (cb.checked && input && !input.value.trim()) {
+        input.focus();
+        input.style.borderColor = '#ef4444';
+        missingDetail = true;
+      }
+    });
+    if (missingDetail) return;
 
-    // Save Record (Cloud Firebase + Local Fallbacks)
-    await saveRegistrationRecord(newRecord);
+    // Build records — one row per programme per participant
+    const timestamp = new Date().toISOString();
+    const records   = selectedProgrammes.map(p => ({
+      id:          Date.now().toString() + Math.random().toString(36).slice(2),
+      name,
+      programme:   p.programme,
+      detail:      p.detail,
+      detailType:  p.detailType,
+      timestamp
+    }));
 
-    // Display Confirmation Screen
+    for (const r of records) {
+      await saveRegistrationRecord(r);
+    }
+
+    // Show success
     registeredName.textContent = name;
-    registeredProgramme.textContent = programme;
-    registeredDetailHeader.textContent = detailTypeLabel + ':';
-    registeredDetailText.textContent = detail;
+    registrationSummaryBox.innerHTML = records.map(r => `
+      <div class="summary-row">
+        <span class="summary-programme">${escapeHtml(r.programme)}</span>
+        <span class="summary-detail"><strong>${escapeHtml(r.detailType)}:</strong> ${escapeHtml(r.detail)}</span>
+      </div>
+    `).join('');
 
     registrationForm.classList.add('hidden');
     successCard.classList.remove('hidden');
@@ -238,71 +215,70 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function resetFormView() {
     registrationForm.reset();
-    dynamicDetailGroup.classList.add('hidden');
-    detailInput.removeAttribute('required');
+    // Hide all detail inputs
+    document.querySelectorAll('.programme-detail').forEach(d => d.classList.add('hidden'));
+    document.querySelectorAll('.detail-input').forEach(i => {
+      i.removeAttribute('required');
+      i.style.borderColor = '';
+    });
+    programmeError.classList.add('hidden');
     successCard.classList.add('hidden');
     registrationForm.classList.remove('hidden');
   }
 
+  // ── STORAGE (Firebase → REST API → localStorage) ────────────────────────────
+  function isFirebaseReady() {
+    return typeof db !== 'undefined' && db !== null;
+  }
 
-  // --- STORAGE ENGINE (FIREBASE FIRESTORE + REST API + LOCAL STORAGE) ---
   async function saveRegistrationRecord(record) {
-    // 1. Try Firebase Firestore
-    if (typeof db !== 'undefined' && db !== null) {
+    // 1. Firebase Firestore
+    if (isFirebaseReady()) {
       try {
         await db.collection('registrations').add(record);
-        console.log('✅ Record saved to Firebase Firestore!');
       } catch (err) {
         console.error('Firestore save error:', err);
       }
     }
-
-    // 2. Try REST API Server if running locally
+    // 2. Local REST API (when server.ps1 is running)
     try {
       await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(record)
       });
-    } catch (err) {}
-
-    // 3. Always update Local Storage
-    const existingData = getStoredRegistrations();
-    existingData.push(record);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(existingData));
+    } catch (_) {}
+    // 3. Always localStorage
+    const existing = getStoredRegistrations();
+    existing.push(record);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
   }
 
   function getStoredRegistrations() {
     try {
-      const dataStr = localStorage.getItem(STORAGE_KEY);
-      return dataStr ? JSON.parse(dataStr) : [];
-    } catch (err) {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    } catch (_) {
       return [];
     }
   }
 
   async function fetchAllRegistrations() {
-    // 1. Check Firebase Firestore
-    if (typeof db !== 'undefined' && db !== null) {
+    // 1. Firebase
+    if (isFirebaseReady()) {
       try {
-        const snapshot = await db.collection('registrations').get();
-        const firebaseRecords = [];
-        snapshot.forEach(doc => {
-          firebaseRecords.push({ id: doc.id, ...doc.data() });
-        });
-        // Sort chronologically by timestamp
-        firebaseRecords.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
-        
-        if (firebaseRecords.length > 0) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(firebaseRecords));
-          return firebaseRecords;
+        const snap    = await db.collection('registrations').get();
+        const records = [];
+        snap.forEach(doc => records.push({ id: doc.id, ...doc.data() }));
+        records.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+        if (records.length > 0) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+          return records;
         }
       } catch (err) {
-        console.warn('Firestore fetch failed, falling back to local data:', err);
+        console.warn('Firestore fetch failed:', err);
       }
     }
-
-    // 2. Try API endpoint
+    // 2. REST API
     try {
       const res = await fetch('/api/registrations');
       if (res.ok) {
@@ -310,32 +286,25 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         return data;
       }
-    } catch (err) {}
-
-    // 3. Fallback to Local Storage
+    } catch (_) {}
+    // 3. localStorage
     return getStoredRegistrations();
   }
 
-
-  // --- HOST DASHBOARD RENDER & REAL-TIME SPREADSHEET VIEW ---
+  // ── HOST DASHBOARD ───────────────────────────────────────────────────────────
   async function renderHostDashboard() {
     participantLinkInput.value = getParticipantUrl();
 
-    // Enable Real-time listener if Firebase Cloud is connected
-    if (typeof db !== 'undefined' && db !== null) {
+    if (isFirebaseReady()) {
+      // Real-time listener
       if (unsubscribeRealtime) unsubscribeRealtime();
-
-      unsubscribeRealtime = db.collection('registrations').onSnapshot((snapshot) => {
-        const liveRecords = [];
-        snapshot.forEach(doc => {
-          liveRecords.push({ id: doc.id, ...doc.data() });
-        });
-        liveRecords.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(liveRecords));
-        renderSpreadsheetRows(liveRecords);
-      }, (err) => {
-        console.error("Firebase Realtime Listener Error:", err);
-      });
+      unsubscribeRealtime = db.collection('registrations').onSnapshot(snap => {
+        const records = [];
+        snap.forEach(doc => records.push({ id: doc.id, ...doc.data() }));
+        records.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+        renderSpreadsheetRows(records);
+      }, err => console.error('Firestore listener error:', err));
     } else {
       const records = await fetchAllRegistrations();
       renderSpreadsheetRows(records);
@@ -355,21 +324,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     spreadsheetTable.classList.remove('hidden');
     emptyState.classList.add('hidden');
-
     totalCountEl.textContent = records.length;
 
-    const lastRecord = records[records.length - 1];
-    if (lastRecord && lastRecord.timestamp) {
-      const d = new Date(lastRecord.timestamp);
-      lastRegistrationTimeEl.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' (' + d.toLocaleDateString() + ')';
-    } else {
-      lastRegistrationTimeEl.textContent = 'N/A';
+    const last = records[records.length - 1];
+    if (last && last.timestamp) {
+      const d = new Date(last.timestamp);
+      lastRegistrationTimeEl.textContent =
+        d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) +
+        ' (' + d.toLocaleDateString() + ')';
     }
 
     records.forEach((record, index) => {
-      const tr = document.createElement('tr');
-      const dateStr = record.timestamp 
-        ? new Date(record.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+      const tr      = document.createElement('tr');
+      const dateStr = record.timestamp
+        ? new Date(record.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
         : 'Just now';
 
       tr.innerHTML = `
@@ -379,7 +347,8 @@ document.addEventListener('DOMContentLoaded', () => {
           <span class="programme-tag">${escapeHtml(record.programme)}</span>
         </td>
         <td class="col-detail">
-          <strong>[${escapeHtml(record.detailType || 'Topic/Song')}]</strong> ${escapeHtml(record.detail)}
+          <span class="detail-type-badge">${escapeHtml(record.detailType || '')}</span>
+          ${escapeHtml(record.detail)}
         </td>
         <td class="col-time">${dateStr}</td>
       `;
@@ -387,169 +356,99 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-
-  // --- COPY LINK HANDLER ---
+  // ── COPY LINK ────────────────────────────────────────────────────────────────
   function handleCopyLink() {
-    const linkText = participantLinkInput.value;
-    if (!linkText) return;
-
+    const text = participantLinkInput.value;
+    if (!text) return;
     if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(linkText).then(showCopySuccess).catch(() => fallbackCopy(linkText));
+      navigator.clipboard.writeText(text).then(showCopySuccess).catch(() => fallbackCopy(text));
     } else {
-      fallbackCopy(linkText);
+      fallbackCopy(text);
     }
   }
 
   function fallbackCopy(text) {
     participantLinkInput.select();
     participantLinkInput.setSelectionRange(0, 99999);
-    try {
-      document.execCommand('copy');
-      showCopySuccess();
-    } catch (err) {
-      alert('Registration Link:\n' + text);
-    }
+    try { document.execCommand('copy'); showCopySuccess(); }
+    catch (_) { alert('Copy this link:\n' + text); }
   }
 
   function showCopySuccess() {
     copyBtnText.textContent = 'Copied!';
     copyLinkBtn.style.backgroundColor = '#10b981';
-    
     setTimeout(() => {
       copyBtnText.textContent = 'Copy Link';
       copyLinkBtn.style.backgroundColor = '';
     }, 2500);
   }
 
-
-  // --- SEARCH & FILTER ---
+  // ── SEARCH ───────────────────────────────────────────────────────────────────
   async function handleSearch() {
-    const query = searchInput.value.toLowerCase().trim();
-    const allRecords = await fetchAllRegistrations();
-
-    if (!query) {
-      renderSpreadsheetRows(allRecords);
-      return;
-    }
-
-    const filtered = allRecords.filter(r => 
-      r.name.toLowerCase().includes(query) ||
-      r.programme.toLowerCase().includes(query) ||
-      r.detail.toLowerCase().includes(query) ||
-      (r.detailType && r.detailType.toLowerCase().includes(query))
-    );
-
-    renderSpreadsheetRows(filtered);
+    const q       = searchInput.value.toLowerCase().trim();
+    const records = await fetchAllRegistrations();
+    if (!q) { renderSpreadsheetRows(records); return; }
+    renderSpreadsheetRows(records.filter(r =>
+      r.name.toLowerCase().includes(q) ||
+      r.programme.toLowerCase().includes(q) ||
+      r.detail.toLowerCase().includes(q)
+    ));
   }
 
-
-  // --- EXPORT TO CSV ---
+  // ── EXPORT CSV ───────────────────────────────────────────────────────────────
   async function exportToCsv() {
     const records = await fetchAllRegistrations();
-    if (!records || records.length === 0) {
-      alert('No registrations available to export.');
-      return;
-    }
+    if (!records || records.length === 0) { alert('No registrations to export.'); return; }
 
-    let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += `"Sl. No.","Participant Name","Programme","Detail Type","Topic / First Line of Song","Registration Time"\n`;
-
-    records.forEach((r, idx) => {
-      const timeStr = r.timestamp ? new Date(r.timestamp).toLocaleString() : '';
-      const row = [
-        idx + 1,
-        `"${escapeCsv(r.name)}"`,
-        `"${escapeCsv(r.programme)}"`,
-        `"${escapeCsv(r.detailType || '')}"`,
-        `"${escapeCsv(r.detail)}"`,
-        `"${escapeCsv(timeStr)}"`
-      ];
-      csvContent += row.join(",") + "\n";
+    let csv = '"Sl. No.","Participant Name","Programme","Detail Type","Topic / First Line of Song","Registered At"\n';
+    records.forEach((r, i) => {
+      const t = r.timestamp ? new Date(r.timestamp).toLocaleString() : '';
+      csv += [i + 1, q(r.name), q(r.programme), q(r.detailType || ''), q(r.detail), q(t)].join(',') + '\n';
     });
 
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Programme_Registrations_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
+    a.download = `Programme_Registrations_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
   }
 
-  function escapeCsv(str) {
-    return str ? str.replace(/"/g, '""') : '';
-  }
+  function q(s) { return '"' + (s || '').replace(/"/g, '""') + '"'; }
 
-
-  // --- DATA MANAGEMENT ---
+  // ── SAMPLE DATA ──────────────────────────────────────────────────────────────
   async function addSampleData() {
-    const sampleRecords = [
-      {
-        id: '1',
-        name: 'Ahammad Firoz',
-        programme: 'Malayalam Speech',
-        detail: 'Importance of Modern Education in Youth',
-        detailType: 'Topic',
-        timestamp: new Date(Date.now() - 3600000 * 3).toISOString()
-      },
-      {
-        id: '2',
-        name: 'Fathima Raniya',
-        programme: 'Madh Song',
-        detail: 'Aalamangal Seyyum Rasool',
-        detailType: 'First line of the song',
-        timestamp: new Date(Date.now() - 3600000 * 2).toISOString()
-      },
-      {
-        id: '3',
-        name: 'Mohammed Bilal',
-        programme: 'Kathaprasangam',
-        detail: 'Veera Pazhassi Raja',
-        detailType: 'Topic',
-        timestamp: new Date(Date.now() - 3600000 * 1).toISOString()
-      },
-      {
-        id: '4',
-        name: 'Suhail & Team',
-        programme: 'Group Song',
-        detail: 'Assalamu Alaika Ya Rasoolallah',
-        detailType: 'First line of the song',
-        timestamp: new Date().toISOString()
-      }
+    const samples = [
+      { name: 'Ahammad Firoz',  programme: 'Malayalam Speech',     detail: 'Importance of Modern Education', detailType: 'Topic' },
+      { name: 'Fathima Raniya', programme: 'Madh Song',            detail: 'Aalamangal Seyyum Rasool',       detailType: 'First line of the song' },
+      { name: 'Fathima Raniya', programme: 'Mappilappattu',        detail: 'Ponnana Maanathu Ninnoru',       detailType: 'First line of the song' },
+      { name: 'Mohammed Bilal', programme: 'Kathaprasangam',       detail: 'Veera Pazhassi Raja',            detailType: 'Topic' },
+      { name: 'Suhail & Team',  programme: 'Group Song',           detail: 'Assalamu Alaika Ya Rasoolallah', detailType: 'First line of the song' },
     ];
-
-    for (const r of sampleRecords) {
-      await saveRegistrationRecord(r);
+    const now = new Date().toISOString();
+    for (const s of samples) {
+      await saveRegistrationRecord({ ...s, id: Date.now().toString() + Math.random(), timestamp: now });
     }
     renderHostDashboard();
   }
 
+  // ── CLEAR DATA ───────────────────────────────────────────────────────────────
   async function clearAllRegistrations() {
-    if (confirm('Are you sure you want to clear all registered participants?')) {
-      localStorage.removeItem(STORAGE_KEY);
-      
-      if (typeof db !== 'undefined' && db !== null) {
-        try {
-          const snapshot = await db.collection('registrations').get();
-          snapshot.forEach(doc => doc.ref.delete());
-        } catch (e) {}
-      }
-
+    if (!confirm('Clear ALL registrations? This cannot be undone.')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    if (isFirebaseReady()) {
       try {
-        await fetch('/api/clear', { method: 'POST' });
-      } catch (err) {}
-
-      renderHostDashboard();
+        const snap = await db.collection('registrations').get();
+        snap.forEach(doc => doc.ref.delete());
+      } catch (_) {}
     }
+    try { await fetch('/api/clear', { method: 'POST' }); } catch (_) {}
+    renderHostDashboard();
   }
 
-  function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g, "&amp;")
-              .replace(/</g, "&lt;")
-              .replace(/>/g, "&gt;")
-              .replace(/"/g, "&quot;")
-              .replace(/'/g, "&#039;");
+  // ── UTILS ────────────────────────────────────────────────────────────────────
+  function escapeHtml(s) {
+    if (!s) return '';
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
   }
 
 });

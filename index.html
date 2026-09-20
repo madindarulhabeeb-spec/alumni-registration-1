@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Programme Registration Portal</title>
   <link rel="stylesheet" href="styles.css" />
-  <!-- Font Awesome Icons for modern UI -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -22,22 +20,19 @@
         <i class="fa-solid fa-graduation-cap"></i>
         <span>Programme Hub</span>
       </div>
-      <div class="nav-mode-indicator" id="navModeIndicator">
-        <!-- JS injects Mode Badge (Host Mode / Participant Registration) -->
-      </div>
+      <div class="nav-mode-indicator" id="navModeIndicator"></div>
     </header>
 
     <!-- ========================================== -->
-    <!-- PARTICIPANT REGISTRATION VIEW -->
+    <!-- PARTICIPANT REGISTRATION VIEW              -->
     <!-- ========================================== -->
     <main id="participantView" class="view-section hidden">
       <div class="card form-card">
         <div class="card-header">
           <h2><i class="fa-solid fa-clipboard-user"></i> Participant Registration</h2>
-          <p>Please fill out your details below to register for the programme.</p>
+          <p>Fill out your details below to register for a programme.</p>
         </div>
 
-        <!-- REGISTRATION FORM -->
         <form id="registrationForm" class="registration-form">
 
           <!-- 1. PARTICIPANT NAME -->
@@ -45,51 +40,98 @@
             <label for="participantName">
               <i class="fa-solid fa-user"></i> Name of the Participant <span class="required">*</span>
             </label>
-            <input 
-              type="text" 
-              id="participantName" 
-              name="participantName" 
-              class="form-control" 
-              placeholder="Enter your full name" 
-              required 
+            <input
+              type="text"
+              id="participantName"
+              class="form-control"
+              placeholder="Enter your full name"
+              required
               autocomplete="off"
             />
           </div>
 
-          <!-- 2. PROGRAMME SELECTION BOX -->
+          <!-- 2. PROGRAMME SELECTION — CHECKBOXES (Multiple allowed) -->
           <div class="form-group">
-            <label for="programmeSelect">
-              <i class="fa-solid fa-list-check"></i> Choose Programme <span class="required">*</span>
+            <label>
+              <i class="fa-solid fa-list-check"></i> Choose Programme(s) <span class="required">*</span>
             </label>
-            <div class="select-wrapper">
-              <select id="programmeSelect" name="programmeSelect" class="form-control" required>
-                <option value="" disabled selected>-- Select a Programme --</option>
-                <option value="Malayalam Speech">Malayalam Speech</option>
-                <option value="Madh Song">Madh Song</option>
-                <option value="Mappilappattu">Mappilappattu</option>
-                <option value="Kathaprasangam">Kathaprasangam</option>
-                <option value="Group Song">Group Song</option>
-                <option value="Conversation Malayalam">Conversation Malayalam</option>
-              </select>
-              <i class="fa-solid fa-chevron-down select-icon"></i>
-            </div>
-          </div>
+            <div class="programmes-box" id="programmesBox">
 
-          <!-- 3. DYNAMIC DETAIL BOX (TOPIC vs FIRST LINE OF THE SONG) -->
-          <div class="form-group hidden" id="dynamicDetailGroup">
-            <label for="detailInput" id="dynamicDetailLabel">
-              <i class="fa-solid fa-heading" id="dynamicDetailIcon"></i> <span id="dynamicLabelText">Topic</span> <span class="required">*</span>
-            </label>
-            <input 
-              type="text" 
-              id="detailInput" 
-              name="detailInput" 
-              class="form-control" 
-              placeholder="Enter details" 
-              required 
-              autocomplete="off"
-            />
-            <small class="help-text" id="dynamicHelpText">Provide details for your selected programme.</small>
+              <!-- Each programme row: checkbox + label + hidden detail input -->
+              <div class="programme-row" data-type="topic">
+                <label class="programme-checkbox-label">
+                  <input type="checkbox" class="programme-check" value="Malayalam Speech" />
+                  <span class="checkbox-custom"></span>
+                  <span class="programme-name">Malayalam Speech</span>
+                </label>
+                <div class="programme-detail hidden">
+                  <input type="text" class="form-control detail-input" placeholder="Enter topic of your speech" />
+                  <small class="help-text">Provide the topic you will present.</small>
+                </div>
+              </div>
+
+              <div class="programme-row" data-type="song">
+                <label class="programme-checkbox-label">
+                  <input type="checkbox" class="programme-check" value="Madh Song" />
+                  <span class="checkbox-custom"></span>
+                  <span class="programme-name">Madh Song</span>
+                </label>
+                <div class="programme-detail hidden">
+                  <input type="text" class="form-control detail-input" placeholder="Enter first line of the song" />
+                  <small class="help-text">Provide the opening line of the song.</small>
+                </div>
+              </div>
+
+              <div class="programme-row" data-type="song">
+                <label class="programme-checkbox-label">
+                  <input type="checkbox" class="programme-check" value="Mappilappattu" />
+                  <span class="checkbox-custom"></span>
+                  <span class="programme-name">Mappilappattu</span>
+                </label>
+                <div class="programme-detail hidden">
+                  <input type="text" class="form-control detail-input" placeholder="Enter first line of the song" />
+                  <small class="help-text">Provide the opening line of the song.</small>
+                </div>
+              </div>
+
+              <div class="programme-row" data-type="topic">
+                <label class="programme-checkbox-label">
+                  <input type="checkbox" class="programme-check" value="Kathaprasangam" />
+                  <span class="checkbox-custom"></span>
+                  <span class="programme-name">Kathaprasangam</span>
+                </label>
+                <div class="programme-detail hidden">
+                  <input type="text" class="form-control detail-input" placeholder="Enter topic of your Kathaprasangam" />
+                  <small class="help-text">Provide the topic you will present.</small>
+                </div>
+              </div>
+
+              <div class="programme-row" data-type="song">
+                <label class="programme-checkbox-label">
+                  <input type="checkbox" class="programme-check" value="Group Song" />
+                  <span class="checkbox-custom"></span>
+                  <span class="programme-name">Group Song</span>
+                </label>
+                <div class="programme-detail hidden">
+                  <input type="text" class="form-control detail-input" placeholder="Enter first line of the song" />
+                  <small class="help-text">Provide the opening line of the song.</small>
+                </div>
+              </div>
+
+              <div class="programme-row" data-type="topic">
+                <label class="programme-checkbox-label">
+                  <input type="checkbox" class="programme-check" value="Conversation Malayalam" />
+                  <span class="checkbox-custom"></span>
+                  <span class="programme-name">Conversation Malayalam</span>
+                </label>
+                <div class="programme-detail hidden">
+                  <input type="text" class="form-control detail-input" placeholder="Enter topic of your conversation" />
+                  <small class="help-text">Provide the topic you will present.</small>
+                </div>
+              </div>
+
+            </div>
+            <small id="programmeError" class="error-text hidden">Please select at least one programme.</small>
           </div>
 
           <!-- SUBMIT BUTTON -->
@@ -99,26 +141,25 @@
 
         </form>
 
-        <!-- SUCCESS CONFIRMATION SCREEN (Shown after registration) -->
+        <!-- SUCCESS CONFIRMATION SCREEN -->
         <div id="successCard" class="success-card hidden">
           <div class="success-icon-wrapper">
             <i class="fa-solid fa-circle-check"></i>
           </div>
           <h3>Registration Successful!</h3>
-          <p class="success-subtext">Thank you, <strong id="registeredName">Participant</strong>! Your registration has been submitted successfully.</p>
-          
-          <div class="registration-summary-box">
-            <div><strong>Programme:</strong> <span id="registeredProgramme">-</span></div>
-            <div><strong id="registeredDetailHeader">Topic:</strong> <span id="registeredDetailText">-</span></div>
+          <p class="success-subtext">Thank you, <strong id="registeredName">Participant</strong>! Your registration has been submitted.</p>
+
+          <div class="registration-summary-box" id="registrationSummaryBox">
+            <!-- Populated by JS -->
           </div>
 
-          <!-- DISCLAIMER BOX FOR PARTICIPANTS -->
+          <!-- DISCLAIMER -->
           <div class="disclaimer-card">
             <div class="disclaimer-header">
               <i class="fa-solid fa-triangle-exclamation"></i>
               <span>Disclaimer</span>
             </div>
-            <p class="disclaimer-body">"the programmes should less than 5 minutes"</p>
+            <p class="disclaimer-body">"The programmes should be less than 5 minutes"</p>
           </div>
 
           <button class="btn btn-secondary btn-block" id="newRegistrationBtn">
@@ -131,55 +172,47 @@
 
 
     <!-- ========================================== -->
-    <!-- HOST DASHBOARD VIEW -->
+    <!-- HOST DASHBOARD VIEW                        -->
     <!-- ========================================== -->
     <main id="hostView" class="view-section hidden">
-      
-      <!-- HOST TOP BANNER & SHARING LINK CONTAINER -->
+
+      <!-- HOST TOP BANNER & LINK SHARING -->
       <div class="card host-header-card">
         <div class="host-title-group">
           <h2><i class="fa-solid fa-user-shield"></i> Host Admin Dashboard</h2>
-          <p>Manage registrations and copy the participant link to share.</p>
+          <p>View all registrations and share the participant link below.</p>
         </div>
 
-        <!-- SHARE PARTICIPANT LINK BOX INSIDE HOST LINK -->
         <div class="share-link-box">
           <div class="share-link-header">
             <i class="fa-solid fa-share-nodes"></i>
-            <span>Participant Registration Link (Share with Participants)</span>
+            <span>Participant Registration Link — Copy &amp; Share with Participants</span>
           </div>
           <div class="share-input-group">
-            <input 
-              type="text" 
-              id="participantLinkInput" 
-              class="share-link-input" 
-              readonly 
-              value="" 
-            />
-            <button id="copyLinkBtn" class="btn btn-copy" title="Copy Registration Link">
+            <input type="text" id="participantLinkInput" class="share-link-input" readonly value="" />
+            <button id="copyLinkBtn" class="btn btn-copy">
               <i class="fa-solid fa-copy"></i> <span id="copyBtnText">Copy Link</span>
             </button>
           </div>
-          <p class="share-note"><i class="fa-solid fa-shield-halved"></i> Participants using this link can register directly without viewing other participants' data.</p>
+          <p class="share-note"><i class="fa-solid fa-shield-halved"></i> Participants can only register — they cannot view other participants' data.</p>
         </div>
       </div>
 
-      <!-- SPREADSHEET TOOLBAR & DATA TABLE -->
+      <!-- SPREADSHEET TOOLBAR & TABLE -->
       <div class="card spreadsheet-card">
         <div class="spreadsheet-toolbar">
           <div class="toolbar-search">
             <i class="fa-solid fa-magnifying-glass search-icon"></i>
             <input type="text" id="searchInput" placeholder="Search by name, programme, or topic..." class="search-input" />
           </div>
-          
           <div class="toolbar-actions">
-            <button id="exportCsvBtn" class="btn btn-outline" title="Download Spreadsheet CSV">
+            <button id="exportCsvBtn" class="btn btn-outline">
               <i class="fa-solid fa-file-csv"></i> Export CSV
             </button>
-            <button id="addSampleDataBtn" class="btn btn-outline btn-ghost" title="Add Sample Test Data">
+            <button id="addSampleDataBtn" class="btn btn-outline">
               <i class="fa-solid fa-database"></i> Add Test Data
             </button>
-            <button id="clearDataBtn" class="btn btn-danger-outline" title="Clear All Registrations">
+            <button id="clearDataBtn" class="btn btn-danger-outline">
               <i class="fa-solid fa-trash-can"></i> Clear All
             </button>
           </div>
@@ -188,7 +221,7 @@
         <!-- STATS BAR -->
         <div class="stats-bar">
           <div class="stat-item">
-            <span class="stat-label">Total Participants:</span>
+            <span class="stat-label">Total Registrations:</span>
             <span class="stat-value" id="totalCount">0</span>
           </div>
           <div class="stat-item">
@@ -197,7 +230,7 @@
           </div>
         </div>
 
-        <!-- SPREADSHEET TABLE VIEW -->
+        <!-- SPREADSHEET TABLE -->
         <div class="table-responsive">
           <table class="spreadsheet-table" id="spreadsheetTable">
             <thead>
@@ -206,12 +239,10 @@
                 <th class="col-name"><i class="fa-solid fa-user"></i> Participant Name</th>
                 <th class="col-programme"><i class="fa-solid fa-icons"></i> Programme</th>
                 <th class="col-detail"><i class="fa-solid fa-file-lines"></i> Topic / First Line of Song</th>
-                <th class="col-time"><i class="fa-solid fa-clock"></i> Registration Time</th>
+                <th class="col-time"><i class="fa-solid fa-clock"></i> Registered At</th>
               </tr>
             </thead>
-            <tbody id="spreadsheetBody">
-              <!-- JS Populates Rows Here -->
-            </tbody>
+            <tbody id="spreadsheetBody"></tbody>
           </table>
         </div>
 
@@ -219,24 +250,21 @@
         <div id="emptyState" class="empty-state hidden">
           <i class="fa-solid fa-folder-open empty-icon"></i>
           <h3>No Registrations Yet</h3>
-          <p>Share the participant registration link to start collecting registrations.</p>
+          <p>Share the registration link above to start collecting entries.</p>
         </div>
 
       </div>
-
     </main>
 
     <!-- FOOTER -->
     <footer class="app-footer">
-      <div class="footer-links" id="footerLinks">
-        <!-- JS injects quick toggle link between Participant View and Host Dashboard for convenience -->
-      </div>
+      <div class="footer-links" id="footerLinks"></div>
       <p>&copy; Programme Registration Portal. All details secured.</p>
     </footer>
 
   </div>
 
-  <!-- Firebase SDK (Compat Version) -->
+  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
