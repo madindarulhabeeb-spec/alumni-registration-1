@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "programme-registration-portal",
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/register", "destination": "/index.html?view=register" },
+    { "source": "/host", "destination": "/index.html?view=host" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
